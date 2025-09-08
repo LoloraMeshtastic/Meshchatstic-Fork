@@ -31,8 +31,7 @@ typedef enum {
     GNSS_MODEL_MTK_PA1616S,
     GNSS_MODEL_AG3335,
     GNSS_MODEL_AG3352,
-    GNSS_MODEL_LS20031,
-    GNSS_MODEL_CM121
+    GNSS_MODEL_LS20031
 } GnssModel_t;
 
 typedef enum {
@@ -160,7 +159,7 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
 
-    uint32_t fixHoldEnds = 0;
+    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
 

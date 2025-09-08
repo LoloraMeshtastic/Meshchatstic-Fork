@@ -62,6 +62,7 @@ class Screen
     void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
+	
 };
 } // namespace graphics
 #else
@@ -187,7 +188,7 @@ class DebugInfo
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
+	
     /// Protects all of internal state.
     concurrency::Lock lock;
 };
@@ -221,6 +222,9 @@ class Screen : public concurrency::OSThread
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
     size_t frameCount = 0; // Total number of active frames
     ~Screen();
+	// Abre inmediatamente la pantalla "Node Info" para el nodo indicado (no requiere favoritos)
+	void openNodeInfoFor(NodeNum nodeNum);
+
 
     // Which frame we want to be displayed, after we regen the frameset by calling setFrames
     enum FrameFocus : uint8_t {
@@ -315,6 +319,28 @@ class Screen : public concurrency::OSThread
     void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
     void showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                        std::function<void(const std::string &)> textCallback);
+
+	    /// Permite saltar directamente a un frame concreto
+    void jumpToFrame(uint8_t frame) {
+        if (ui) ui->switchToFrame(frame);
+    }
+
+	    // 👇 Wrapper público para saltar a un frame temporal
+    void showSingleFrame(FrameCallback cb) {
+        FrameCallback tmp[1] = { cb };
+        ui->setFrames(tmp, 1);
+        setFastFramerate();
+        forceDisplay(true);
+    }
+
+
+    void showCustomFrame(FrameCallback *frames, uint8_t count, FrameFocus focus = FOCUS_DEFAULT) {
+        ui->disableAllIndicators();
+        ui->setFrames(frames, count);
+        setFastFramerate();
+        forceDisplay(true);
+    }
+
 
     void requestMenu(graphics::menuHandler::screenMenus menuToShow)
     {
@@ -669,7 +695,6 @@ class Screen : public concurrency::OSThread
             uint8_t nodelist_distance = 255;
             uint8_t nodelist_bearings = 255;
             uint8_t clock = 255;
-            uint8_t chirpy = 255;
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;
             uint8_t lora = 255;
@@ -699,7 +724,6 @@ class Screen : public concurrency::OSThread
 #endif
         bool lora = false;
         bool show_favorites = false;
-        bool chirpy = true;
     } hiddenFrames;
 
     /// Try to start drawing ASAP

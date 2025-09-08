@@ -56,6 +56,12 @@ namespace graphics
 namespace MessageRenderer
 {
 
+// --------------------------------------------------------------------
+// PageDown flag + API (consumido dentro de drawTextMessageFrame(...))
+// --------------------------------------------------------------------
+static int s_pendingPageDown = 0;
+void requestPageDown() { s_pendingPageDown++; }
+
 // Simple cache based on text hash
 static size_t cachedKey = 0;
 static std::vector<std::string> cachedLines;
@@ -240,6 +246,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     uint32_t now = millis();
+
+
 #ifndef EXCLUDE_EMOJI
     // === Bounce animation setup ===
     static uint32_t lastBounceTime = 0;
@@ -309,6 +317,18 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     static float scrollY = 0.0f;
     static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
     static bool waitingToReset = false, scrollStarted = false;
+
+    // --- Page Down si hay petición (SELECT largo) ---
+    if (s_pendingPageDown > 0) {
+        float page = (float)usableScrollHeight * 0.9f;  // ~90% de una página visible
+        scrollY += page;
+        if (scrollY > scrollStop) scrollY = scrollStop;
+        s_pendingPageDown = 0;
+
+        // forzar estado de scroll activo para no auto-resetear
+        scrollStarted = true;
+        scrollStartDelay = lastTime;
+    }
 
     // === Smooth scrolling adjustment ===
     // You can tweak this divisor to change how smooth it scrolls.

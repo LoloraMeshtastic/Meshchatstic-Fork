@@ -70,7 +70,7 @@ int32_t RotaryEncoderImpl::runOnce()
         this->notifyObservers(&e);
     }
 
-    return 10;
+    return 20;
 }
 
 #endif

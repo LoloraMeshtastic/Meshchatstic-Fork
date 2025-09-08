@@ -33,9 +33,9 @@ int32_t LinuxInput::runOnce()
 {
 
     if (firstTime) {
-        if (portduino_config.keyboardDevice == "")
+        if (settingsStrings[keyboardDevice] == "")
             return disable();
-        fd = open(portduino_config.keyboardDevice.c_str(), O_RDWR);
+        fd = open(settingsStrings[keyboardDevice].c_str(), O_RDWR);
         if (fd < 0)
             return disable();
         ret = ioctl(fd, EVIOCGRAB, (void *)1);

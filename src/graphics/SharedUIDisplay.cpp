@@ -1,7 +1,6 @@
 #include "graphics/SharedUIDisplay.h"
 #include "RTC.h"
 #include "graphics/ScreenFonts.h"
-#include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
 #include "power.h"
@@ -15,10 +14,6 @@ void determineResolution(int16_t screenheight, int16_t screenwidth)
 {
     if (screenwidth > 128) {
         isHighResolution = true;
-    }
-
-    if (screenwidth > 128 && screenheight <= 64) {
-        isHighResolution = false;
     }
 
     // Special case for Heltec Wireless Tracker v1.1
@@ -58,7 +53,7 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 // *************************
 // * Common Header Drawing *
 // *************************
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert, bool show_date)
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool battery_only)
 {
     constexpr int HEADER_OFFSET_Y = 1;
     y += HEADER_OFFSET_Y;
@@ -74,7 +69,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
 
-    if (!force_no_invert) {
+    if (!battery_only) {
         // === Inverted Header Background ===
         if (isInverted) {
             display->setColor(BLACK);
@@ -192,27 +187,12 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     int timeStrWidth = display->getStringWidth("12:34"); // Default alignment
     int timeX = screenW - xOffset - timeStrWidth + 4;
 
-    if (rtc_sec > 0) {
+    if (rtc_sec > 0 && !battery_only) {
         // === Build Time String ===
         long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
         int hour = hms / SEC_PER_HOUR;
         int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         snprintf(timeStr, sizeof(timeStr), "%d:%02d", hour, minute);
-
-        // === Build Date String ===
-        char datetimeStr[25];
-        UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, false);
-        char dateLine[40];
-
-        if (isHighResolution) {
-            snprintf(dateLine, sizeof(dateLine), "%s", datetimeStr);
-        } else {
-            if (hasUnreadMessage) {
-                snprintf(dateLine, sizeof(dateLine), "%s", &datetimeStr[5]);
-            } else {
-                snprintf(dateLine, sizeof(dateLine), "%s", &datetimeStr[2]);
-            }
-        }
 
         if (config.display.use_12h_clock) {
             bool isPM = hour >= 12;
@@ -222,11 +202,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
         }
 
-        if (show_date) {
-            timeStrWidth = display->getStringWidth(dateLine);
-        } else {
-            timeStrWidth = display->getStringWidth(timeStr);
-        }
+        timeStrWidth = display->getStringWidth(timeStr);
         timeX = screenW - xOffset - timeStrWidth + 3;
 
         // === Show Mail or Mute Icon to the Left of Time ===
@@ -253,7 +229,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconW = 16, iconH = 12;
                 int iconX = iconRightEdge - iconW;
                 int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
-                if (isInverted && !force_no_invert) {
+                if (isInverted) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
                     display->setColor(BLACK);
@@ -268,7 +244,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             } else {
                 int iconX = iconRightEdge - (mail_width - 2);
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
-                if (isInverted && !force_no_invert) {
+                if (isInverted) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, mail_width + 2, mail_height + 2);
                     display->setColor(BLACK);
@@ -311,17 +287,10 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             }
         }
 
-        if (show_date) {
-            // === Draw Date ===
-            display->drawString(timeX, textY, dateLine);
-            if (isBold)
-                display->drawString(timeX - 1, textY, dateLine);
-        } else {
-            // === Draw Time ===
-            display->drawString(timeX, textY, timeStr);
-            if (isBold)
-                display->drawString(timeX - 1, textY, timeStr);
-        }
+        // === Draw Time ===
+        display->drawString(timeX, textY, timeStr);
+        if (isBold)
+            display->drawString(timeX - 1, textY, timeStr);
 
     } else {
         // === No Time Available: Mail/Mute Icon Moves to Far Right ===

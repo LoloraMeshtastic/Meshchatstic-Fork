@@ -10,6 +10,9 @@ namespace graphics
 namespace MessageRenderer
 {
 
+// One-shot: pedir salto de página en la pantalla de mensaje largo
+void requestPageDown();
+
 // Text and emote rendering
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount);
 
@@ -25,6 +28,9 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
 // Function to render the message content
 void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &lines, const std::vector<int> &rowHeights, int x,
                           int yOffset, int scrollBottom, const Emote *emotes, int numEmotes, bool isInverted, bool isBold);
+// one-shot: pedir salto de página en mensajes largos
+void requestPageDown();
+
 
 } // namespace MessageRenderer
 } // namespace graphics

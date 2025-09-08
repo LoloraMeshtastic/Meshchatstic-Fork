@@ -5,10 +5,6 @@ BPS_RESET=false
 TFT_BUILD=false
 MCU=""
 
-# Constants
-RESET_BAUD=1200
-FIRMWARE_OFFSET=0x00
-
 # Variant groups
 BIGDB_8MB=(
 	"picomputer-s3"
@@ -37,9 +33,10 @@ BIGDB_16MB=(
 	"m5stack-cores3"
 	"station-g2"
     "t-eth-elite"
-    "tlora-pager"
     "t-watch-s3"
-    "elecrow-adv"
+    "elecrow-adv-35-tft"
+    "elecrow-adv-24-28-tft"
+    "elecrow-adv1-43-50-70-tft"
 )
 S3_VARIANTS=(
     "s3"
@@ -50,7 +47,6 @@ S3_VARIANTS=(
     "station-g2"
     "unphone"
     "t-eth-elite"
-    "tlora-pager"
     "mesh-tab"
     "dreamcatcher"
     "ESP32-S3-Pico"
@@ -125,7 +121,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [[ $BPS_RESET == true ]]; then
-	$ESPTOOL_CMD --baud $RESET_BAUD --after no_reset read_flash_status
+	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
 	exit 0
 fi
 
@@ -205,12 +201,12 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
     fi
 
     echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
-    $ESPTOOL_CMD erase-flash
-    $ESPTOOL_CMD write-flash $FIRMWARE_OFFSET "${FILENAME}"
+    $ESPTOOL_CMD erase_flash
+    $ESPTOOL_CMD write_flash 0x00 "${FILENAME}"
     echo "Trying to flash ${OTAFILE} at offset ${OTA_OFFSET}"
-    $ESPTOOL_CMD write-flash $OTA_OFFSET "${OTAFILE}"
+    $ESPTOOL_CMD write_flash $OTA_OFFSET "${OTAFILE}"
     echo "Trying to flash ${SPIFFSFILE}, at offset ${OFFSET}"
-    $ESPTOOL_CMD write-flash $OFFSET "${SPIFFSFILE}"
+    $ESPTOOL_CMD write_flash $OFFSET "${SPIFFSFILE}"
 
 else
     show_help

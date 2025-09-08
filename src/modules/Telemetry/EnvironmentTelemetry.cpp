@@ -30,8 +30,7 @@
 
 namespace graphics
 {
-extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert,
-                             bool show_date);
+extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool battery_only);
 }
 #if __has_include(<Adafruit_AHTX0.h>)
 #include "Sensor/AHT10.h"
@@ -199,13 +198,6 @@ T1000xSensor t1000xSensor;
 IndicatorSensor indicatorSensor;
 #endif
 
-#if __has_include(<Adafruit_TSL2561_U.h>)
-#include "Sensor/TSL2561Sensor.h"
-TSL2561Sensor tsl2561Sensor;
-#else
-NullSensor tsl2561Sensor;
-#endif
-
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -304,8 +296,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = max17048Sensor.runOnce();
             if (cgRadSens.hasSensor())
                 result = cgRadSens.runOnce();
-            if (tsl2561Sensor.hasSensor())
-                result = tsl2561Sensor.runOnce();
             if (pct2075Sensor.hasSensor())
                 result = pct2075Sensor.runOnce();
                 // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
@@ -650,10 +640,6 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
     if (nau7802Sensor.hasSensor()) {
         valid = valid && nau7802Sensor.getMetrics(m);
-        hasSensor = true;
-    }
-    if (tsl2561Sensor.hasSensor()) {
-        valid = valid && tsl2561Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (aht10Sensor.hasSensor()) {

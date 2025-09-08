@@ -481,6 +481,204 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
     }
 }
 
+
+// === Node Info directo (sin depender del carrusel de favoritos) ===
+// Dibuja la MISMA pantalla que drawNodeInfo(), pero tomando el nodo por número
+// y sin exigir que sea favorito ni calcular índices de frames.
+void UIRenderer::drawNodeInfoDirect(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // Tomamos el nodo directamente por número (puede NO ser favorito)
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentFavoriteNodeNum);
+    if (!node || node->num == nodeDB->getNodeNum())
+        return;
+
+    display->clear();
+
+    // === Title === (idéntico estilo; cambia “Fav:” a “Node:” si prefieres)
+    const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
+    char titlestr[32] = {0};
+    snprintf(titlestr, sizeof(titlestr), "Fav: %s", shortName);
+
+    // Cabecera común (batería/hora/mail)
+    graphics::drawCommonHeader(display, x, y, titlestr);
+
+    // ===== MISMO BLOQUE DE LÍNEAS QUE TU drawNodeInfo() =====
+    int line = 1;
+    std::string usernameStr;
+
+    // 1) Long name
+    const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
+    if (username) {
+        usernameStr = sanitizeString(username);
+        display->drawString(x, getTextPositions(display)[line++], usernameStr.c_str());
+    }
+
+    // 2) Signal + Hops
+    char signalHopsStr[32] = "";
+    bool haveSignal = false;
+    int percentSignal = clamp((int)((node->snr + 10) * 5), 0, 100);
+    if ((int)((node->snr + 10) * 5) >= 0 && node->snr > -100) {
+        snprintf(signalHopsStr, sizeof(signalHopsStr), " Sig: %d%%", percentSignal);
+        haveSignal = true;
+    }
+    if (node->hops_away > 0) {
+        size_t len = strlen(signalHopsStr);
+        snprintf(signalHopsStr + len, sizeof(signalHopsStr) - len, "%s[%d %s]",
+                 haveSignal ? " " : "", node->hops_away, (node->hops_away == 1 ? "Hop" : "Hops"));
+    }
+    if (signalHopsStr[0] && line < 5) {
+        display->drawString(x, getTextPositions(display)[line++], signalHopsStr);
+    }
+
+    // 3) Heard (last seen)
+    char seenStr[20] = "";
+    uint32_t seconds = sinceLastSeen(node);
+    if (seconds != 0 && seconds != UINT32_MAX) {
+        uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
+        snprintf(seenStr, sizeof(seenStr), (days > 365 ? " Heard: ?" : " Heard: %d%c ago"),
+                 (days    ? days
+                  : hours ? hours
+                          : minutes),
+                 (days    ? 'd'
+                  : hours ? 'h'
+                          : 'm'));
+    }
+    if (seenStr[0] && line < 5) {
+        display->drawString(x, getTextPositions(display)[line++], seenStr);
+    }
+
+    // 4) Uptime
+    char uptimeStr[32] = "";
+    if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
+        uint32_t uptime = node->device_metrics.uptime_seconds;
+        uint32_t days = uptime / 86400;
+        uint32_t hours = (uptime % 86400) / 3600;
+        uint32_t mins = (uptime % 3600) / 60;
+        if (days)
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
+        else if (hours)
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
+        else
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
+    }
+    if (uptimeStr[0] && line < 5) {
+        display->drawString(x, getTextPositions(display)[line++], uptimeStr);
+    }
+
+    // 5) Distancia (idéntico a tu versión)
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    char distStr[24] = "";
+    bool haveDistance = false;
+
+    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
+        double lat1 = ourNode->position.latitude_i * 1e-7;
+        double lon1 = ourNode->position.longitude_i * 1e-7;
+        double lat2 = node->position.latitude_i * 1e-7;
+        double lon2 = node->position.longitude_i * 1e-7;
+        double earthRadiusKm = 6371.0;
+        double dLat = (lat2 - lat1) * DEG_TO_RAD;
+        double dLon = (lon2 - lon1) * DEG_TO_RAD;
+        double a = sin(dLat/2)*sin(dLat/2) + cos(lat1*DEG_TO_RAD)*cos(lat2*DEG_TO_RAD)*sin(dLon/2)*sin(dLon/2);
+        double c = 2 * atan2(sqrt(a), sqrt(1-a));
+        double distanceKm = earthRadiusKm * c;
+
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            double miles = distanceKm * 0.621371;
+            if (miles < 0.1) {
+                int feet = (int)(miles * 5280);
+                if (feet > 0 && feet < 1000) { snprintf(distStr, sizeof(distStr), " Distance: %dft", feet); haveDistance = true; }
+                else if (feet >= 1000)       { snprintf(distStr, sizeof(distStr), " Distance: ¼mi");      haveDistance = true; }
+            } else {
+                int roundedMiles = (int)(miles + 0.5);
+                if (roundedMiles > 0 && roundedMiles < 1000) { snprintf(distStr, sizeof(distStr), " Distance: %dmi", roundedMiles); haveDistance = true; }
+            }
+        } else {
+            if (distanceKm < 1.0) {
+                int meters = (int)(distanceKm * 1000);
+                if (meters > 0 && meters < 1000) { snprintf(distStr, sizeof(distStr), " Distance: %dm",  meters); haveDistance = true; }
+                else if (meters >= 1000)         { snprintf(distStr, sizeof(distStr), " Distance: 1km");        haveDistance = true; }
+            } else {
+                int km = (int)(distanceKm + 0.5);
+                if (km > 0 && km < 1000) { snprintf(distStr, sizeof(distStr), " Distance: %dkm", km); haveDistance = true; }
+            }
+        }
+    }
+    if (haveDistance && distStr[0] && line < 5) {
+        display->drawString(x, getTextPositions(display)[line++], distStr);
+    }
+
+    // Brújula (idéntica a tu versión)
+    if (SCREEN_WIDTH > SCREEN_HEIGHT) {
+        bool showCompass = false;
+        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node))
+            showCompass = true;
+
+        if (showCompass) {
+            const int16_t topY = getTextPositions(display)[1];
+            const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
+            const int16_t usableHeight = bottomY - topY - 5;
+            int16_t compassRadius = usableHeight / 2;
+            if (compassRadius < 8) compassRadius = 8;
+            const int16_t compassDiam = compassRadius * 2;
+            const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
+            const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
+
+            const auto &op = ourNode->position;
+            float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
+                                                   : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+
+            const auto &p = node->position;
+            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING)  myHeading = 0;
+            else                                                                  bearing -= myHeading;
+
+            display->drawCircle(compassX, compassY, compassRadius);
+            CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
+        }
+    } else {
+        bool showCompass = false;
+        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node))
+            showCompass = true;
+
+        if (showCompass) {
+            int yBelowContent = (line > 0 && line <= 5) ? (getTextPositions(display)[line - 1] + FONT_HEIGHT_SMALL + 2)
+                                                        : getTextPositions(display)[1];
+            const int margin = 4;
+#if defined(USE_EINK)
+            const int iconSize = (isHighResolution) ? 16 : 8;
+            const int navBarHeight = iconSize + 6;
+#else
+            const int navBarHeight = 0;
+#endif
+            int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
+            if (availableHeight < FONT_HEIGHT_SMALL * 2) return;
+
+            int compassRadius = availableHeight / 2;
+            if (compassRadius < 8) compassRadius = 8;
+            if (compassRadius * 2 > SCREEN_WIDTH - 16) compassRadius = (SCREEN_WIDTH - 16) / 2;
+
+            int compassX = x + SCREEN_WIDTH / 2;
+            int compassY = yBelowContent + availableHeight / 2;
+
+            const auto &op = ourNode->position;
+            float myHeading = 0;
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
+                myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
+                                                 : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            }
+            graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+
+            const auto &p = node->position;
+            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) bearing -= myHeading;
+
+            graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
+            display->drawCircle(compassX, compassY, compassRadius);
+        }
+    }
+}
+
 // ****************************
 // * Device Focused Screen    *
 // ****************************
@@ -879,26 +1077,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     config.display.heading_bold = false;
 
     const char *displayLine = ""; // Initialize to empty string by default
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-
-    bool usePhoneGPS = (ourNode && nodeDB->hasValidPosition(ourNode) &&
-                        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED);
-
-    if (usePhoneGPS) {
-        // Phone-provided GPS is active
-        displayLine = "Phone GPS";
-        int yOffset = (isHighResolution) ? 3 : 1;
-        if (isHighResolution) {
-            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
-                                                     imgSatellite_height, imgSatellite, display);
-        } else {
-            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
-                             imgSatellite);
-        }
-        int xOffset = (isHighResolution) ? 6 : 0;
-        display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
-    } else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        // GPS disabled / not present
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         if (config.position.fixed_position) {
             displayLine = "Fixed GPS";
         } else {
@@ -915,7 +1094,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         int xOffset = (isHighResolution) ? 6 : 0;
         display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
     } else {
-        // Onboard GPS
         UIRenderer::drawGps(display, 0, getTextPositions(display)[line++], gpsStatus);
     }
 
@@ -942,61 +1120,32 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // If GPS is off, no need to display these parts
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
-        // === Second Row: Last GPS Fix ===
-        if (gpsStatus->getLastFixMillis() > 0) {
-            uint32_t delta = (millis() - gpsStatus->getLastFixMillis()) / 1000; // seconds since last fix
-            uint32_t days = delta / 86400;
-            uint32_t hours = (delta % 86400) / 3600;
-            uint32_t mins = (delta % 3600) / 60;
-            uint32_t secs = delta % 60;
 
-            char buf[32];
-#if defined(USE_EINK)
-            // E-Ink: skip seconds, show only days/hours/mins
-            if (days > 0) {
-                snprintf(buf, sizeof(buf), " Last: %ud %uh", days, hours);
-            } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), " Last: %uh %um", hours, mins);
-            } else {
-                snprintf(buf, sizeof(buf), " Last: %um", mins);
-            }
-#else
-            // Non E-Ink: include seconds where useful
-            if (days > 0) {
-                snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
-            } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), "Last: %uh %um", hours, mins);
-            } else if (mins > 0) {
-                snprintf(buf, sizeof(buf), "Last: %um %us", mins, secs);
-            } else {
-                snprintf(buf, sizeof(buf), "Last: %us", secs);
-            }
-#endif
-
-            display->drawString(0, getTextPositions(display)[line++], buf);
-        } else {
-            display->drawString(0, getTextPositions(display)[line++], "Last: ?");
-        }
+        // === Second Row: Date ===
+        uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+        char datetimeStr[25];
+        bool showTime = false; // set to true for full datetime
+        UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
+        char fullLine[40];
+        snprintf(fullLine, sizeof(fullLine), " Date: %s", datetimeStr);
+        display->drawString(0, getTextPositions(display)[line++], fullLine);
 
         // === Third Row: Latitude ===
         char latStr[32];
-        snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
+        snprintf(latStr, sizeof(latStr), " Lat: %.5f", geoCoord.getLatitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], latStr);
 
         // === Fourth Row: Longitude ===
         char lonStr[32];
-        snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
+        snprintf(lonStr, sizeof(lonStr), " Lon: %.5f", geoCoord.getLongitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], lonStr);
 
         // === Fifth Row: Altitude ===
         char DisplayLineTwo[32] = {0};
-        int32_t alt = (strcmp(displayLine, "Phone GPS") == 0 && ourNode && nodeDB->hasValidPosition(ourNode))
-                          ? ourNode->position.altitude
-                          : geoCoord.getAltitude();
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
         } else {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0im", geoCoord.getAltitude());
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0im", geoCoord.getAltitude());
         }
         display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
     }

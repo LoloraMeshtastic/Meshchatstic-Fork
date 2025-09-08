@@ -9,9 +9,7 @@ class menuHandler
   public:
     enum screenMenus {
         menu_none,
-        lora_Menu,
         lora_picker,
-        device_role_picker,
         no_timeout_lora_picker,
         TZ_picker,
         twelve_hour_picker,
@@ -32,6 +30,8 @@ class menuHandler
         test_menu,
         number_test,
         wifi_toggle_menu,
+		wifi_config_menu,
+		wifi_password_prompt,   // NUEVO
         bluetooth_toggle_menu,
         notifications_menu,
         screen_options_menu,
@@ -40,6 +40,7 @@ class menuHandler
         key_verification_init,
         key_verification_final_prompt,
         trace_route_menu,
+		node_info_menu,
         throttle_message,
         FrameToggles
     };
@@ -48,7 +49,7 @@ class menuHandler
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
     static void loraMenu();
-    static void DeviceRolePicker();
+	static void wifiConfigMenu();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
     static void clockMenu();

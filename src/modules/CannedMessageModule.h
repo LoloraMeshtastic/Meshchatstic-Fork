@@ -2,6 +2,8 @@
 #if HAS_SCREEN
 #include "ProtobufModule.h"
 #include "input/InputBroker.h"
+#include <functional>
+
 
 // ============================
 //        Enums & Defines
@@ -61,6 +63,11 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void LaunchWithDestination(NodeNum, uint8_t newChannel = 0);
     void LaunchRepeatDestination();
     void LaunchFreetextWithDestination(NodeNum, uint8_t newChannel = 0);
+    // Abre el editor de Freetext como "prompt" genérico (NO envía por mesh).
+    void LaunchFreetextPrompt(const char* header,
+                              const std::string& initial,
+                              std::function<void(const std::string&)> onSubmit);
+
 
     // === Emote Picker navigation ===
     int emotePickerIndex = 0; // Tracks currently selected emote in the picker

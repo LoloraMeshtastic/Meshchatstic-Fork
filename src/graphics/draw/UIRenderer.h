@@ -1,6 +1,5 @@
 #pragma once
 
-#include "NodeDB.h"
 #include "graphics/Screen.h"
 #include "graphics/emotes.h"
 #include <OLEDDisplay.h>
@@ -32,6 +31,9 @@ class Screen;
 class UIRenderer
 {
   public:
+	// Dibuja la pantalla de Node Info sin depender del carrusel de favoritos
+	static void drawNodeInfoDirect(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y);
+
     // Common UI elements
     static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus,
                           int node_offset = 0, bool show_total = true, String additional_words = "");
